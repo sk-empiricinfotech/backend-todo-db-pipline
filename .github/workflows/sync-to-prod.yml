@@ -1,0 +1,41 @@
+name: Sync Staging → Production
+
+on:
+  workflow_dispatch:     # Run manually from GitHub Actions tab
+  push:
+    branches:
+      - main             # Optional: Auto-run when you push to main
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install Supabase CLI
+        run: npm install -g supabase
+
+      - name: Authenticate Supabase
+        run: supabase login --token ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+
+      - name: Link to Staging
+        run: supabase link --project-ref ${{ vars.STAGING_REF }}
+
+      - name: Pull schema and functions from Staging
+        run: |
+          supabase db pull
+          supabase functions pull
+
+      - name: Link to Production
+        run: supabase link --project-ref ${{ vars.PROD_REF }}
+
+      - name: Push schema and deploy functions to Production
+        run: |
+          supabase db push --non-interactive
+          supabase functions deploy --project-ref ${{ vars.PROD_REF }}
