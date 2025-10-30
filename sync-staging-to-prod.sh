@@ -25,10 +25,10 @@ npx supabase --version
 
 # ✅ Link to Staging
 echo "🔗 Linking to Staging ($STAGING_REF)..."
-npx supabase link --project-ref "$STAGING_REF" 
+npx supabase link --project-ref "$STAGING_REF"
 
-# ✅ Pull schema + functions from Staging
-echo "⬇️ Pulling schema and functions from Staging..."
+# ✅ Pull schema from Staging
+echo "⬇️ Pulling database schema from Staging..."
 
 set +e
 DB_PULL_OUTPUT=$(npx supabase db pull 2>&1)
@@ -52,16 +52,26 @@ else
   echo "✅ DB pull completed successfully."
 fi
 
-# ✅ Pull functions
-echo "⬇️ Pulling functions..."
-npx supabase functions pull
+# ✅ Download all functions from Staging
+echo "⬇️ Downloading Edge Functions from Staging..."
+FUNCTIONS=$(npx supabase functions list --output json | jq -r '.[].name')
+
+if [[ -z "$FUNCTIONS" ]]; then
+  echo "⚠️ No functions found in Staging project."
+else
+  for fn in $FUNCTIONS; do
+    echo "📥 Downloading function: $fn ..."
+    npx supabase functions download "$fn"
+  done
+  echo "✅ All functions downloaded successfully."
+fi
 
 # ✅ Link to Production
 echo "🔗 Linking to Production ($PROD_REF)..."
-npx supabase link --project-ref "$PROD_REF" 
+npx supabase link --project-ref "$PROD_REF"
 
-# ✅ Push schema + deploy functions to Production
-echo "⬆️ Pushing schema and deploying functions to Production..."
+# ✅ Push schema to Production
+echo "⬆️ Pushing schema to Production..."
 
 set +e
 DB_PUSH_OUTPUT=$(npx supabase db push 2>&1)
@@ -87,8 +97,12 @@ else
   echo "✅ DB push completed successfully."
 fi
 
-# ✅ Deploy functions
-echo "🚀 Deploying Edge Functions..."
-npx supabase functions deploy
+# ✅ Deploy all functions to Production
+echo "🚀 Deploying Edge Functions to Production..."
+for fn in $FUNCTIONS; do
+  echo "📤 Deploying function: $fn ..."
+  npx supabase functions deploy "$fn"
+done
+echo "✅ All functions deployed successfully."
 
 echo "🎉 Sync complete! Staging → Production is now in sync."
