@@ -1,56 +1,99 @@
 name: Sync Staging → Production
 
 on:
-  workflow_dispatch:     # Run manually from GitHub Actions tab
+  workflow_dispatch:     # ✅ Run manually from the Actions tab
   push:
     branches:
-      - main             # Optional: Auto-run when you push to main
+      - main             # Optional: auto-run when you push to main
 
 jobs:
   sync:
     runs-on: ubuntu-latest
+
     steps:
+      # --------------------------------------------
+      # ✅ Checkout code
+      # --------------------------------------------
       - name: Checkout repo
         uses: actions/checkout@v4
 
+      # --------------------------------------------
+      # ✅ Setup Node.js
+      # --------------------------------------------
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: 20
 
-      # Install Supabase CLI locally (no global install)
-      - name: Install Supabase CLI (local)
+      # --------------------------------------------
+      # ✅ Install Supabase CLI locally
+      # --------------------------------------------
+      - name: Install Supabase CLI
         run: npm install supabase --save-dev
 
-      # Optional: verify version (ensures CLI is available)
+      # --------------------------------------------
+      # ✅ Verify CLI installation
+      # --------------------------------------------
       - name: Verify Supabase CLI
         run: npx supabase --version
         env:
           SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
 
-      # Link to Staging and pull database + functions
-      - name: Link to Staging
-        run: npx supabase link --project-ref ${{ vars.STAGING_REF }}
+      # --------------------------------------------
+      # ✅ Link to Staging and dump schema
+      # --------------------------------------------
+      - name: Export schema from Staging
+        run: |
+          echo "🔹 Linking to Staging project..."
+          npx supabase link --project-ref ${{ vars.STAGING_REF }}
+          echo "🔹 Dumping schema from Staging..."
+          npx supabase db dump --data false --file staging_schema.sql
         env:
           SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
 
-      - name: Pull schema and functions from Staging
+      # --------------------------------------------
+      # ✅ Pull latest functions from Staging
+      # --------------------------------------------
+      - name: Pull functions from Staging
         run: |
-          npx supabase db pull
+          echo "🔹 Pulling functions from Staging..."
           npx supabase functions pull
         env:
           SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
 
-      # Link to Production
+      # --------------------------------------------
+      # ✅ Link to Production
+      # --------------------------------------------
       - name: Link to Production
-        run: npx supabase link --project-ref ${{ vars.PROD_REF }}
+        run: |
+          echo "🔹 Linking to Production project..."
+          npx supabase link --project-ref ${{ vars.PROD_REF }}
         env:
           SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
 
-      # Push schema and deploy functions to Production
-      - name: Push schema and deploy functions to Production
+      # --------------------------------------------
+      # ✅ Apply schema from Staging → Production
+      # (This safely syncs DB structure without migration issues)
+      # --------------------------------------------
+      - name: Push schema to Production
         run: |
-          npx supabase db push 
-          npx supabase functions deploy 
+          echo "🔹 Applying schema to Production..."
+          npx supabase db push --file staging_schema.sql
         env:
           SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+
+      # --------------------------------------------
+      # ✅ Deploy functions to Production
+      # --------------------------------------------
+      - name: Deploy Supabase Functions
+        run: |
+          echo "🔹 Deploying functions to Production..."
+          npx supabase functions deploy
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+
+      # --------------------------------------------
+      # ✅ Cleanup (optional)
+      # --------------------------------------------
+      - name: Cleanup temp files
+        run: rm -f staging_schema.sql
