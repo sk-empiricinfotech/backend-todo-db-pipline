@@ -36,9 +36,7 @@ jobs:
 
       - name: Pull schema and functions from Staging
         run: |
-          echo "🔹 Dumping schema from Staging..."
-          npx supabase db dump -f staging_schema.sql
-          # npx supabase db pull
+          npx supabase db pull
           # npx supabase functions pull
         env:
           SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
@@ -52,9 +50,7 @@ jobs:
       # Push schema and deploy functions to Production
       - name: Push schema and deploy functions to Production
         run: |
-          echo "🔹 Pushing schema (no data) to Production..."
-          npx supabase db push --file staging_schema.sql
-          # npx supabase db push 
+          npx supabase db push 
           # npx supabase functions deploy 
         env:
           SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
