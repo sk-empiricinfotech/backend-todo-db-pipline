@@ -36,7 +36,7 @@ jobs:
 
       - name: Pull schema and functions from Staging
         run: |
-          npx supabase db pull
+          # npx supabase db pull
           # npx supabase functions pull
         env:
           SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
