@@ -1,0 +1,96 @@
+# This is a Production Deploy Pipeline for Host Family Admin Panel Deploy
+name: ProdDeploy
+on:
+  push:
+    branches:
+      - prod
+ 
+jobs:
+  build:
+    runs-on: ubuntu-latest
+ 
+    steps:
+      - uses: actions/checkout@v4
+ 
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+ 
+      - name: Install Supabase CLI (local)
+        run: npm install supabase --save-dev  
+ 
+      - name: Link and pull schema
+        run: |
+          npx supabase link --project-ref ${{ secrets.SUPABASE_PROJECTID_STAGING }}
+          set +e
+          OUTPUT=$(npx supabase db pull 2>&1)
+          STATUS=$?
+          set -e
+ 
+          echo "$OUTPUT"
+ 
+          if [[ $STATUS -ne 0 ]]; then
+          echo "Migration mismatch detected, attempting repair..."
+          REPAIR_CMD=$(echo "$OUTPUT" | grep -oE "(npx )?supabase migration repair --status reverted [0-9]+" || true)
+ 
+          if [[ -n "$REPAIR_CMD" ]]; then
+          REPAIR_CMD="npx supabase migration repair --status reverted $REPAIR_ID"
+          echo "Running repair command: $REPAIR_CMD"
+          eval $REPAIR_CMD
+          echo "Re-running db pull after repair..."
+          npx supabase db pull
+          else
+          echo "No repair command found. Failing."
+          exit 1
+          fi
+          fi     
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}             
+ 
+      - name: Link production and sync schema
+        run: |
+          npx supabase link --project-ref ${{ secrets.SUPABASE_PROJECTID_PROD }} 
+          npx supabase db diff --linked --use-migrations > diff.sql || true
+          if [ -s diff.sql ]; then
+            echo "Applying schema diff to production..."
+            npx supabase db push --linked
+          else
+            echo "No schema changes detected."
+          fi  
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}          
+ 
+      - name: Deploy edge functions
+        run: |
+          npx supabase functions deploy --project-ref ${{ secrets.SUPABASE_PROJECTID_PROD }}  --no-verify-jwt --all
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: 'stable'
+ 
+      - name: Replace Supabase credentials (Prod)
+        run: |
+          echo "Before updating:"
+          cat lib/backend/supabase/supabase.dart
+          sed -i "s#^String _kSupabaseUrl = '.*';#String _kSupabaseUrl = '${{ secrets.SUPABASE_URL_PROD }}';#g" lib/backend/supabase/supabase.dart
+          sed -i "s#^String _kSupabaseAnonKey = '.*';#String _kSupabaseAnonKey = '${{ secrets.SUPABASE_ANON_KEY_PROD }}';#g" lib/backend/supabase/supabase.dart
+          echo "Updated supabase.dart content:"
+          cat lib/backend/supabase/supabase.dart
+      - name: Flutter pub get
+        run: flutter pub get  
+ 
+      - name: Build Flutter web (release)
+        run: flutter build web --release  
+ 
+      - name: Setup Firebase CLI
+        run: npm install -g firebase-tools        
+ 
+      - name: Deploy to Firebase (Prod Sites Only)
+        env:
+          GOOGLE_APPLICATION_CREDENTIALS: ${{ runner.temp }}/gcp_key.json
+        run: |
+          echo '${{ secrets.GOOGLE_APPLICATION_CREDENTIALS_JSON }}' > $GOOGLE_APPLICATION_CREDENTIALS
+          firebase deploy --only hosting:host-family-admin-app
