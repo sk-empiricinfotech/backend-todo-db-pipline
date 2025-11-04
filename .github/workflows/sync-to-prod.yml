@@ -2,9 +2,9 @@ name: Sync Staging → Production
 
 on:
   workflow_dispatch:     # Run manually from GitHub Actions tab
-  push:
-    branches:
-      - main             # Optional: Auto-run when you push to main
+  # push:
+  #   branches:
+  #     - main             # Optional: Auto-run when you push to main
 
 jobs:
   sync:
