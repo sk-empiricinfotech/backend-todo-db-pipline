@@ -1,4 +1,4 @@
-name: Pull from Staging (DB + Functions)
+name: Pull from Staging
 
 on:
   workflow_dispatch:
